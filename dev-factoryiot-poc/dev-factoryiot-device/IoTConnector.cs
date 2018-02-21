@@ -2,55 +2,99 @@
 using System.Collections.Generic;
 using System.Text;
 using Microsoft.Azure.Devices.Client;
-using Microsoft.Azure.Devices;
+using Microsoft.Azure.Devices.Shared;
 using Newtonsoft.Json;
 using System.IO;
 using System.Configuration;
 using System.Security;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace dev_factoryiot_device
 {
     class IoTConnector
     {
         private DeviceClient deviceClient;
-        private double _temperature = 20;
-        private double _productionUnitPerMinute = 60;
-        private double _heatPerUnit = 5;
-        private double _overheatLimit = 200;
-        private double _cooldownPerMinute = 20;
-        private double _restartCooldownTemp = 100;
-        private int _sendIntervalInMs = 10000;
-        private int _readIntervalInMs = 1000;
-        private bool _overheated = false;
-        private int messageId = 1;
+        private FactorySettings factorySetting; 
         private string deviceId = ConfigurationManager.AppSettings["device_id"];
+        public enum ConnectionType { X509, ConnectionString }
 
-        public IoTConnector(SecureString password)
+        public IoTConnector(SecureString password, ConnectionType connectionType, TransportType transportType)
         {
-            string certPath = ConfigurationManager.AppSettings["cert_path"];
-            string iotHubUri = ConfigurationManager.AppSettings["iot_hub"];
 
-            System.Security.Cryptography.X509Certificates.X509Certificate2 myCert = new System.Security.Cryptography.X509Certificates.X509Certificate2(certPath, password);
+            // Create Device Client
+            switch (connectionType)
+            {
+                case ConnectionType.X509:
+                    ConnectViaX509(password, transportType);
+                    break;
+                case ConnectionType.ConnectionString:
+                    ConnectViaConnectionString(transportType);
+                    break;
+            }
 
-            deviceClient = DeviceClient.Create(iotHubUri, new DeviceAuthenticationWithX509Certificate(deviceId, myCert), TransportType.Mqtt);
-
+            // Check if it worked
             if (deviceClient == null)
             {
                 Console.WriteLine("Failed to create DeviceClient!");
             }
             else
             {
+                // Create Settings
+                factorySetting = new FactorySettings(deviceClient);
+
                 Console.WriteLine($"Successfully created DeviceClient for device {deviceId}!");
-                SendDeviceToCloudMessagesAsync();
-                ReceiveCloudToDeviceMessagesAsync();
+
+                var cts = new CancellationTokenSource();
+
+                SendFactoryProperties();          
+
+                SendDeviceToCloudMessagesAsync(cts.Token);
+                ReceiveCloudToDeviceMessagesAsync(cts.Token);
+
+                deviceClient.SetDesiredPropertyUpdateCallbackAsync(HandleSettingChanged, null).Wait();
+                Console.ReadKey();
+                cts.Cancel();
             }
 
         }
 
-        private async void ReceiveCloudToDeviceMessagesAsync()
+        private void ConnectViaConnectionString(TransportType transportType)
         {
-            while (true)
+            string connectionString = ConfigurationManager.AppSettings["device_conn_str"];
+            deviceClient = DeviceClient.CreateFromConnectionString(connectionString, transportType);
+        }
+
+        private void ConnectViaX509(SecureString password, TransportType transportType)
+        {
+            string certPath = ConfigurationManager.AppSettings["cert_path"];
+            string iotHubUri = ConfigurationManager.AppSettings["iot_hub"];
+
+            System.Security.Cryptography.X509Certificates.X509Certificate2 myCert = new System.Security.Cryptography.X509Certificates.X509Certificate2(certPath, password);
+
+            deviceClient = DeviceClient.Create(iotHubUri, new DeviceAuthenticationWithX509Certificate(deviceId, myCert), transportType);
+        }
+
+        public async void SendFactoryProperties()
+        {
+            try
+            {
+                Console.WriteLine("Sending factory properties:");
+                Console.WriteLine(JsonConvert.SerializeObject(factorySetting));
+
+                await deviceClient.UpdateReportedPropertiesAsync(factorySetting);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Error in factory properties: {0}", ex.Message);
+            }
+        }
+
+
+        private async void ReceiveCloudToDeviceMessagesAsync(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
             {
                 Task<Message> message;
 
@@ -67,41 +111,39 @@ namespace dev_factoryiot_device
                     Console.WriteLine("{0} > Receiving Message TimeOut", DateTime.Now);
                 }
 
-                await Task.Delay(_readIntervalInMs);
+                await Task.Delay(factorySetting.ReadIntervalInMs);
             }
         }
 
-        private async void SendDeviceToCloudMessagesAsync()
+        private async void SendDeviceToCloudMessagesAsync(CancellationToken token)
         {   
             Random rand = new Random();
-            double currentTemperature = _temperature;
+            double currentTemperature = factorySetting.Temperature;
 
-            while (true)
+            while (!token.IsCancellationRequested)
             {
-                int producedUnits;
+                int producedUnits = 0;
 
-                if (_overheated)
+                if (factorySetting.Overheated)
                 {
                     //Overheat
-                    producedUnits = 0;
-                    currentTemperature = currentTemperature - (_cooldownPerMinute / (_sendIntervalInMs / 1000));
-                    if (_restartCooldownTemp > currentTemperature)
+                    currentTemperature = currentTemperature - (factorySetting.CooldownPerMinute / (factorySetting.SendIntervalInMs / 1000));
+                    if (factorySetting.RestartCooldownTemp > currentTemperature)
                     {
-                        _overheated = false;
+                        factorySetting.Overheated = false;
                     }
                 }
-                else
+                else if (factorySetting.Activated)
                 {
                     //Normal progress
-                    producedUnits = Convert.ToInt32((_productionUnitPerMinute / 60) * (_sendIntervalInMs / 1000));
-                    currentTemperature = currentTemperature + rand.NextDouble() * _heatPerUnit * (_productionUnitPerMinute / 60) * (_sendIntervalInMs / 1000) - (_cooldownPerMinute / (_sendIntervalInMs / 1000));
-                    _overheated = (currentTemperature > _overheatLimit);
+                    producedUnits = Convert.ToInt32((factorySetting.UnitPerMinute / 60) * (factorySetting.SendIntervalInMs / 1000));
+                    currentTemperature = currentTemperature + rand.NextDouble() * factorySetting.HeatPerUnit * (factorySetting.UnitPerMinute / 60) * (factorySetting.SendIntervalInMs / 1000) - (factorySetting.CooldownPerMinute / (factorySetting.SendIntervalInMs / 1000));
+                    factorySetting.Overheated = (currentTemperature > factorySetting.OverheatLimit);
                 }
                 
                 // Create Message
                 var telemetryDataPoint = new
                 {
-                    messageId = messageId++,
                     deviceId,
                     temperature = currentTemperature,
                     newUnits = producedUnits
@@ -110,15 +152,59 @@ namespace dev_factoryiot_device
                 // Serialize and send
                 var messageString = JsonConvert.SerializeObject(telemetryDataPoint);
                 var message = new Message(Encoding.UTF8.GetBytes(messageString));
-                message.Properties.Add("overheat", _overheated ? "true" : "false");
 
                 await deviceClient.SendEventAsync(message);
 
+
                 Console.WriteLine("{0} > Sending message: {1}", DateTime.Now, messageString);
 
-                await Task.Delay(_sendIntervalInMs);
+                await Task.Delay(factorySetting.SendIntervalInMs);
+            }
+        }
+
+        private async Task HandleSettingChanged(TwinCollection desiredProperties, object userContext)
+        {
+            try
+            {
+                Console.WriteLine("Received settings change...");
+                Console.WriteLine(JsonConvert.SerializeObject(desiredProperties));
+
+                SetSetting(desiredProperties, "Activated");
+                SetSetting(desiredProperties, "UnitPerMinute");
+                SetSetting(desiredProperties, "SendIntervalInMs");
+                SetSetting(desiredProperties, "ReadIntervalInMs");
+
+                await deviceClient.UpdateReportedPropertiesAsync(factorySetting);
             }
 
+            catch (Exception ex)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Error in sample: {0}", ex.Message);
+            }
+        }
+
+        private void SetSetting(TwinCollection desiredProperties, string setting)
+        {
+            if (desiredProperties.Contains(setting))
+            {
+                // Act on setting change, then
+                AcknowledgeSettingChange(desiredProperties, setting);
+            }
+        }
+
+        private void AcknowledgeSettingChange(TwinCollection desiredProperties, string setting)
+        {
+            var value = new
+            {
+                value = desiredProperties[setting]["value"],
+                status = "completed",
+                desiredVersion = desiredProperties["$version"],
+                message = "Processed"
+            };
+
+            factorySetting.UpdateDeviceProperties(setting, value);
         }
     }
+
 }
