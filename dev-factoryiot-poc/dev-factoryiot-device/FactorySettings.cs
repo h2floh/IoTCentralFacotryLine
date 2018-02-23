@@ -23,6 +23,20 @@ namespace dev_factoryiot_device
 
         private DeviceClient deviceClient;
 
+        public List<string> UpdatableSettings()
+        {
+            return new List<string>() {
+                  "UnitPerMinute".ToString()
+                , "HeatPerUnit".ToString()
+                , "OverheatLimit".ToString()
+                , "CooldownPerMinute".ToString()
+                , "RestartCooldownTemp".ToString()
+                , "SendIntervalInMs".ToString()
+                , "ReadIntervalInMs".ToString()
+                , "Activated".ToString()
+            };
+        }
+
         public FactorySettings(DeviceClient deviceClient) : base()
         {
             this.deviceClient = deviceClient;
@@ -37,16 +51,6 @@ namespace dev_factoryiot_device
             UpdateDeviceProperties("ReadIntervalInMs", 1000, false);
             UpdateDeviceProperties("Overheated", false, false);
             UpdateDeviceProperties("Activated", true, false);
-
-            //this["UnitPerMinute"] = 60;
-            //this["HeatPerUnit"] = 5;
-            //this["OverheatLimit"] = 200;
-            //this["CooldownPerMinute"] = 20;
-            //this["RestartCooldownTemp"] = 100;
-            //this["SendIntervalInMs"] = 10000;
-            //this["ReadIntervalInMs"] = 1000;
-            //this["Overheated"] = false;
-            //this["Activated"] = true;
         }
 
         public void UpdateDeviceProperties(string setting, dynamic value, bool updateToCloud = true)

@@ -47,7 +47,8 @@ namespace dev_factoryiot_device
 
                 var cts = new CancellationTokenSource();
 
-                SendFactoryProperties();          
+                var result = SyncFactoryProperties();
+                result.Wait();
 
                 SendDeviceToCloudMessagesAsync(cts.Token);
                 ReceiveCloudToDeviceMessagesAsync(cts.Token);
@@ -75,12 +76,16 @@ namespace dev_factoryiot_device
             deviceClient = DeviceClient.Create(iotHubUri, new DeviceAuthenticationWithX509Certificate(deviceId, myCert), transportType);
         }
 
-        public async void SendFactoryProperties()
+        public async Task SyncFactoryProperties()
         {
             try
             {
                 Console.WriteLine("Sending factory properties:");
                 Console.WriteLine(JsonConvert.SerializeObject(factorySetting));
+
+                var twin = await deviceClient.GetTwinAsync();
+
+                await HandleSettingChanged(new TwinCollection(JsonConvert.SerializeObject(twin.Properties.Desired)), null);
 
                 await deviceClient.UpdateReportedPropertiesAsync(factorySetting);
             }
@@ -127,7 +132,7 @@ namespace dev_factoryiot_device
                 if (factorySetting.Overheated)
                 {
                     //Overheat
-                    currentTemperature = currentTemperature - (factorySetting.CooldownPerMinute / (factorySetting.SendIntervalInMs / 1000));
+                    currentTemperature = currentTemperature - ((factorySetting.CooldownPerMinute / 60) * (factorySetting.SendIntervalInMs / 1000));
                     if (factorySetting.RestartCooldownTemp > currentTemperature)
                     {
                         factorySetting.Overheated = false;
@@ -137,7 +142,8 @@ namespace dev_factoryiot_device
                 {
                     //Normal progress
                     producedUnits = Convert.ToInt32((factorySetting.UnitPerMinute / 60) * (factorySetting.SendIntervalInMs / 1000));
-                    currentTemperature = currentTemperature + rand.NextDouble() * factorySetting.HeatPerUnit * (factorySetting.UnitPerMinute / 60) * (factorySetting.SendIntervalInMs / 1000) - (factorySetting.CooldownPerMinute / (factorySetting.SendIntervalInMs / 1000));
+                    currentTemperature = (currentTemperature + rand.NextDouble() * factorySetting.HeatPerUnit * (factorySetting.UnitPerMinute / 60) * (factorySetting.SendIntervalInMs / 1000)) 
+                        - ((factorySetting.CooldownPerMinute / 60 ) * (factorySetting.SendIntervalInMs / 1000));
                     factorySetting.Overheated = (currentTemperature > factorySetting.OverheatLimit);
                 }
                 
@@ -149,14 +155,16 @@ namespace dev_factoryiot_device
                     newUnits = producedUnits
                 };
 
-                // Serialize and send
-                var messageString = JsonConvert.SerializeObject(telemetryDataPoint);
-                var message = new Message(Encoding.UTF8.GetBytes(messageString));
+                // Serialize and send but only if device is activated
+                if (factorySetting.Activated)
+                { 
+                    var messageString = JsonConvert.SerializeObject(telemetryDataPoint);
+                    var message = new Message(Encoding.UTF8.GetBytes(messageString));
 
-                await deviceClient.SendEventAsync(message);
+                    await deviceClient.SendEventAsync(message);
 
-
-                Console.WriteLine("{0} > Sending message: {1}", DateTime.Now, messageString);
+                    Console.WriteLine("{0} > Sending message: {1}", DateTime.Now, messageString);
+                }
 
                 await Task.Delay(factorySetting.SendIntervalInMs);
             }
@@ -169,10 +177,14 @@ namespace dev_factoryiot_device
                 Console.WriteLine("Received settings change...");
                 Console.WriteLine(JsonConvert.SerializeObject(desiredProperties));
 
-                SetSetting(desiredProperties, "Activated");
-                SetSetting(desiredProperties, "UnitPerMinute");
-                SetSetting(desiredProperties, "SendIntervalInMs");
-                SetSetting(desiredProperties, "ReadIntervalInMs");
+                foreach(var item in factorySetting.UpdatableSettings())
+                {
+                    SetSetting(desiredProperties, item);
+                }
+                
+                //SetSetting(desiredProperties, "UnitPerMinute");
+                //SetSetting(desiredProperties, "SendIntervalInMs");
+                //SetSetting(desiredProperties, "ReadIntervalInMs");
 
                 await deviceClient.UpdateReportedPropertiesAsync(factorySetting);
             }
