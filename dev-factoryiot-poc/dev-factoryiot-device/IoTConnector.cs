@@ -15,24 +15,20 @@ namespace dev_factoryiot_device
     class IoTConnector
     {
         private DeviceClient deviceClient;
+        private DeviceClient secondaryDeviceClient;
         private FactorySettings factorySetting; 
         private string deviceId = ConfigurationManager.AppSettings["device_id"];
         public enum ConnectionType { X509, ConnectionString }
+        private enum ClientType { Primary, Secondary }
 
         public IoTConnector(SecureString password, ConnectionType connectionType, TransportType transportType)
         {
+            // Add primary connection
+            AddConnection(password, ClientType.Primary, connectionType, transportType);
+        }
 
-            // Create Device Client
-            switch (connectionType)
-            {
-                case ConnectionType.X509:
-                    ConnectViaX509(password, transportType);
-                    break;
-                case ConnectionType.ConnectionString:
-                    ConnectViaConnectionString(transportType);
-                    break;
-            }
-
+        public void Start()
+        {
             // Check if it worked
             if (deviceClient == null)
             {
@@ -57,23 +53,61 @@ namespace dev_factoryiot_device
                 Console.ReadKey();
                 cts.Cancel();
             }
-
         }
 
-        private void ConnectViaConnectionString(TransportType transportType)
+        private void AddConnection(SecureString password, ClientType clientType, ConnectionType connectionType, TransportType transportType)
+        {
+            // Create Device Client
+            switch (connectionType)
+            {
+                case ConnectionType.X509:
+                    ConnectViaX509(password, clientType, transportType);
+                    break;
+                case ConnectionType.ConnectionString:
+                    ConnectViaConnectionString(clientType, transportType);
+                    break;
+            }
+        }
+
+        public void AddSecondaryConnection(SecureString password, ConnectionType connectionType, TransportType transportType)
+        {
+            // Add secondary connection
+            AddConnection(password, ClientType.Secondary, connectionType, transportType);
+        }
+
+
+        private void ConnectViaConnectionString(ClientType clientType, TransportType transportType)
         {
             string connectionString = ConfigurationManager.AppSettings["device_conn_str"];
-            deviceClient = DeviceClient.CreateFromConnectionString(connectionString, transportType);
+            // Device Client Type
+            switch (clientType)
+            {
+                case ClientType.Primary:
+                    deviceClient = DeviceClient.CreateFromConnectionString(connectionString, transportType);
+                    break;
+                case ClientType.Secondary:
+                    secondaryDeviceClient = DeviceClient.CreateFromConnectionString(connectionString, transportType);
+                    break;
+            }
         }
 
-        private void ConnectViaX509(SecureString password, TransportType transportType)
+        private void ConnectViaX509(SecureString password, ClientType clientType, TransportType transportType)
         {
             string certPath = ConfigurationManager.AppSettings["cert_path"];
             string iotHubUri = ConfigurationManager.AppSettings["iot_hub"];
 
             System.Security.Cryptography.X509Certificates.X509Certificate2 myCert = new System.Security.Cryptography.X509Certificates.X509Certificate2(certPath, password);
 
-            deviceClient = DeviceClient.Create(iotHubUri, new DeviceAuthenticationWithX509Certificate(deviceId, myCert), transportType);
+            // Device Client Type
+            switch (clientType)
+            {
+                case ClientType.Primary:
+                    deviceClient = DeviceClient.Create(iotHubUri, new DeviceAuthenticationWithX509Certificate(deviceId, myCert), transportType);
+                    break;
+                case ClientType.Secondary:
+                    secondaryDeviceClient = DeviceClient.Create(iotHubUri, new DeviceAuthenticationWithX509Certificate(deviceId, myCert), transportType);
+                    break;
+            }
         }
 
         public async Task SyncFactoryProperties()
@@ -152,7 +186,8 @@ namespace dev_factoryiot_device
                 {
                     deviceId,
                     temperature = currentTemperature,
-                    newUnits = producedUnits
+                    newUnits = producedUnits,
+                    overheated = factorySetting.Overheated
                 };
 
                 // Serialize and send but only if device is activated
@@ -162,6 +197,11 @@ namespace dev_factoryiot_device
                     var message = new Message(Encoding.UTF8.GetBytes(messageString));
 
                     await deviceClient.SendEventAsync(message);
+
+                    if (secondaryDeviceClient != null)
+                    {
+                        await secondaryDeviceClient.SendEventAsync(message);
+                    }
 
                     Console.WriteLine("{0} > Sending message: {1}", DateTime.Now, messageString);
                 }
