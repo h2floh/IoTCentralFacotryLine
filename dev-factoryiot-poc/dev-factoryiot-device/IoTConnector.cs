@@ -200,6 +200,7 @@ namespace dev_factoryiot_device
 
                     if (secondaryDeviceClient != null)
                     {
+                        message.BodyStream.Position = 0;
                         await secondaryDeviceClient.SendEventAsync(message);
                     }
 
