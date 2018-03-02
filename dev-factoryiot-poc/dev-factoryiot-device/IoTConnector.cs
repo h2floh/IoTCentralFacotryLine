@@ -154,6 +154,11 @@ namespace dev_factoryiot_device
             }
         }
 
+        private double CheckBaseTemp(double temp)
+        {
+            return (temp < 20) ? 20 : temp;
+        }
+
         private async void SendDeviceToCloudMessagesAsync(CancellationToken token)
         {   
             Random rand = new Random();
@@ -166,7 +171,10 @@ namespace dev_factoryiot_device
                 if (factorySetting.Overheated)
                 {
                     //Overheat
-                    currentTemperature = currentTemperature - ((factorySetting.CooldownPerMinute / 60) * (factorySetting.SendIntervalInMs / 1000));
+                    currentTemperature = CheckBaseTemp(
+                        currentTemperature - ((factorySetting.CooldownPerMinute / 60) * (factorySetting.SendIntervalInMs / 1000))
+                        );
+                    
                     if (factorySetting.RestartCooldownTemp > currentTemperature)
                     {
                         factorySetting.Overheated = false;
@@ -176,10 +184,14 @@ namespace dev_factoryiot_device
                 {
                     //Normal progress
                     producedUnits = Convert.ToInt32((factorySetting.UnitPerMinute / 60) * (factorySetting.SendIntervalInMs / 1000));
-                    currentTemperature = (currentTemperature + rand.NextDouble() * factorySetting.HeatPerUnit * (factorySetting.UnitPerMinute / 60) * (factorySetting.SendIntervalInMs / 1000)) 
-                        - ((factorySetting.CooldownPerMinute / 60 ) * (factorySetting.SendIntervalInMs / 1000));
+                    currentTemperature = CheckBaseTemp(
+                        (currentTemperature + rand.NextDouble() * factorySetting.HeatPerUnit * (factorySetting.UnitPerMinute / 60) * (factorySetting.SendIntervalInMs / 1000)) 
+                        - ((factorySetting.CooldownPerMinute / 60 ) * (factorySetting.SendIntervalInMs / 1000))
+                        );
                     factorySetting.Overheated = (currentTemperature > factorySetting.OverheatLimit);
                 }
+
+                
                 
                 // Create Message
                 var telemetryDataPoint = new
