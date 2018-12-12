@@ -3,22 +3,26 @@ using System.Collections.Generic;
 using System.Text;
 using Microsoft.Azure.Devices.Client;
 using Microsoft.Azure.Devices.Shared;
+using Microsoft.Azure.Devices.Provisioning.Client;
+using Microsoft.Azure.Devices.Provisioning.Client.Transport;
 using Newtonsoft.Json;
 using System.IO;
 using System.Configuration;
 using System.Security;
 using System.Threading.Tasks;
 using System.Threading;
+using System.Text.RegularExpressions;
 
 namespace dev_factoryiot_device
 {
     class IoTConnector
     {
+        private const string GlobalDeviceEndpoint = "global.azure-devices-provisioning.net";
         private DeviceClient deviceClient;
         private DeviceClient secondaryDeviceClient;
         private FactorySettings factorySetting; 
         private string deviceId = ConfigurationManager.AppSettings["device_id"];
-        public enum ConnectionType { X509, ConnectionString }
+        public enum ConnectionType { X509, ConnectionString, DPSX509 }
         private enum ClientType { Primary, Secondary }
 
         public IoTConnector(SecureString password, ConnectionType connectionType, TransportType transportType)
@@ -66,6 +70,9 @@ namespace dev_factoryiot_device
                 case ConnectionType.ConnectionString:
                     ConnectViaConnectionString(clientType, transportType);
                     break;
+                case ConnectionType.DPSX509:
+                    ConnectViaDPSX509(password, transportType);
+                    break;
             }
         }
 
@@ -107,6 +114,56 @@ namespace dev_factoryiot_device
                 case ClientType.Secondary:
                     secondaryDeviceClient = DeviceClient.Create(iotHubUri, new DeviceAuthenticationWithX509Certificate(deviceId, myCert), transportType);
                     break;
+            }
+        }
+
+        private void ConnectViaDPSX509(SecureString password, TransportType transportType)
+        {
+            string certPath = Environment.GetEnvironmentVariable("DEVICE_CERTIFICATE");
+            if (certPath == null) certPath = ConfigurationManager.AppSettings["DEVICE_CERTIFICATE"];
+
+            string scopeId = Environment.GetEnvironmentVariable("DPS_IDSCOPE");
+            if (scopeId == null) scopeId = ConfigurationManager.AppSettings["DPS_IDSCOPE"];
+
+            System.Security.Cryptography.X509Certificates.X509Certificate2 myCert = 
+                new System.Security.Cryptography.X509Certificates.X509Certificate2(certPath, password);
+
+            using (var security = new SecurityProviderX509Certificate(myCert)) { 
+
+                using (var transport = new ProvisioningTransportHandlerMqtt(TransportFallbackType.TcpOnly))
+                // using (var transport = new ProvisioningTransportHandlerHttp())
+                // using (var transport = new ProvisioningTransportHandlerMqtt(TransportFallbackType.TcpOnly))
+                // using (var transport = new ProvisioningTransportHandlerMqtt(TransportFallbackType.WebSocketOnly))
+                {
+                    ProvisioningDeviceClient provClient =
+                        ProvisioningDeviceClient.Create(GlobalDeviceEndpoint, scopeId, security, transport);
+
+                    Console.WriteLine($"RegistrationID = {security.GetRegistrationID()}");
+                    VerifyRegistrationIdFormat(security.GetRegistrationID());
+
+                    Console.Write("ProvisioningClient RegisterAsync . . . ");
+                    DeviceRegistrationResult result = provClient.RegisterAsync().Result;
+
+                    Console.WriteLine($"{result.Status}");
+                    Console.WriteLine($"ProvisioningClient AssignedHub: {result.AssignedHub}; DeviceID: {result.DeviceId}");
+
+                    if (result.Status != ProvisioningRegistrationStatusType.Assigned) return;
+
+                    var auth = new DeviceAuthenticationWithX509Certificate(result.DeviceId, (security as SecurityProviderX509).GetAuthenticationCertificate());
+
+                    deviceClient = DeviceClient.Create(result.AssignedHub, auth, transportType);
+                }
+
+            }
+
+        }
+
+        private void VerifyRegistrationIdFormat(string v)
+        {
+            var r = new Regex("^[a-z0-9-]*$");
+            if (!r.IsMatch(v))
+            {
+                throw new FormatException("Invalid registrationId: The registration ID is alphanumeric, lowercase, and may contain hyphens");
             }
         }
 
