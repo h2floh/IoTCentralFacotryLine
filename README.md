@@ -1,4 +1,4 @@
-# IoTCentralFacotryLine
+# IoTCentralFactoryLine
 .NET Core program for a virtual production line for a IoTCentral Demo which also demonstrates the X509 CA auto provisioning feature
 
 # Connection Options
@@ -47,4 +47,9 @@ docker push <your-repository-name>/<container-name>
 ```bash
 docker rm $(docker ps --all -q --no-trunc)
 docker rmi $(docker images --filter "dangling=true" -q --no-trunc)
+```
+# Execute on ACI (Azure Container Instances)
+```cli
+az container create -g IoTCentralDemo -l japaneast -f ProductionGroupKorea.yaml
+az container create -g IoTCentralDemo -l northeurope -f ProductionGroupGermany.yaml
 ```
