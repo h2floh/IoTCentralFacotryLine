@@ -48,8 +48,6 @@ namespace dev_factoryiot_device
                     new IoTConnector(securePassword, IoTConnector.ConnectionType.DPSX509, Microsoft.Azure.Devices.Client.TransportType.Mqtt_Tcp_Only).Start();
                     break;
             }
-
-            Console.ReadLine();
         }
     }
 }

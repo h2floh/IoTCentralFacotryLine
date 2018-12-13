@@ -50,12 +50,13 @@ namespace dev_factoryiot_device
                 var result = SyncFactoryProperties();
                 result.Wait();
 
-                SendDeviceToCloudMessagesAsync(cts.Token);
-                ReceiveCloudToDeviceMessagesAsync(cts.Token);
+                var tasks = new List<Task>();
+                tasks.Add(SendDeviceToCloudMessagesAsync(cts.Token));
+                tasks.Add(ReceiveCloudToDeviceMessagesAsync(cts.Token));
 
                 deviceClient.SetDesiredPropertyUpdateCallbackAsync(HandleSettingChanged, null).Wait();
-                Console.ReadKey();
-                cts.Cancel();
+
+                Task.WaitAll(tasks.ToArray());
             }
         }
 
@@ -188,7 +189,7 @@ namespace dev_factoryiot_device
         }
 
 
-        private async void ReceiveCloudToDeviceMessagesAsync(CancellationToken token)
+        private async Task ReceiveCloudToDeviceMessagesAsync(CancellationToken token)
         {
             while (!token.IsCancellationRequested)
             {
@@ -216,7 +217,7 @@ namespace dev_factoryiot_device
             return (temp < 20) ? 20 : temp;
         }
 
-        private async void SendDeviceToCloudMessagesAsync(CancellationToken token)
+        private async Task SendDeviceToCloudMessagesAsync(CancellationToken token)
         {   
             Random rand = new Random();
             double currentTemperature = factorySetting.Temperature;
