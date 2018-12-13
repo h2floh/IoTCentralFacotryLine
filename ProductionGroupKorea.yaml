@@ -1,0 +1,36 @@
+apiVersion: 2018-06-01
+location: japaneast
+name: KoreaFactory
+properties:
+  containers:
+  - name: production-line-a
+    properties:
+      environmentVariables:
+        - name: 'DEVICE_CERTIFICATE'
+          value: 'factory-korea-a.pfx'
+        - name: 'DPS_IDSCOPE'
+          value: '<IoTCentralDPS_ScopeID>'
+        - name: 'PASSWORD'
+          secureValue: '<password_of_cert>'
+      image: florianbespin/dev-factory-iotcentral:latest
+      resources:
+        requests:
+          cpu: 0.5
+          memoryInGb: 0.5
+  - name: production-line-b
+    properties:
+      environmentVariables:
+        - name: 'DEVICE_CERTIFICATE'
+          value: 'factory-korea-b.pfx'
+        - name: 'DPS_IDSCOPE'
+          value: '<IoTCentralDPS_ScopeID>'
+        - name: 'PASSWORD'
+          secureValue: '<password_of_cert>'
+      image: florianbespin/dev-factory-iotcentral:latest
+      resources:
+        requests:
+          cpu: 0.5
+          memoryInGb: 0.5
+  osType: Linux
+tags: null
+type: Microsoft.ContainerInstance/containerGroups

@@ -101,20 +101,25 @@ namespace dev_factoryiot_device
 
         private void ConnectViaX509(SecureString password, ClientType clientType, TransportType transportType)
         {
-            string certPath = ConfigurationManager.AppSettings["cert_path"];
-            string iotHubUri = ConfigurationManager.AppSettings["iot_hub"];
+            string certPath = Environment.GetEnvironmentVariable("DEVICE_CERTIFICATE");
+            if (certPath == null) certPath = ConfigurationManager.AppSettings["DEVICE_CERTIFICATE"];
+            string iotHubUri = Environment.GetEnvironmentVariable("IOT_HUB_URI");
+            if (iotHubUri == null) iotHubUri = ConfigurationManager.AppSettings["IOT_HUB_URI"];
 
             System.Security.Cryptography.X509Certificates.X509Certificate2 myCert = new System.Security.Cryptography.X509Certificates.X509Certificate2(certPath, password);
-
-            // Device Client Type
-            switch (clientType)
+            using (var security = new SecurityProviderX509Certificate(myCert))
             {
-                case ClientType.Primary:
-                    deviceClient = DeviceClient.Create(iotHubUri, new DeviceAuthenticationWithX509Certificate(deviceId, myCert), transportType);
-                    break;
-                case ClientType.Secondary:
-                    secondaryDeviceClient = DeviceClient.Create(iotHubUri, new DeviceAuthenticationWithX509Certificate(deviceId, myCert), transportType);
-                    break;
+                deviceId = security.GetRegistrationID();
+                // Device Client Type
+                switch (clientType)
+                {
+                    case ClientType.Primary:
+                        deviceClient = DeviceClient.Create(iotHubUri, new DeviceAuthenticationWithX509Certificate(security.GetRegistrationID(), myCert), transportType);
+                        break;
+                    case ClientType.Secondary:
+                        secondaryDeviceClient = DeviceClient.Create(iotHubUri, new DeviceAuthenticationWithX509Certificate(security.GetRegistrationID(), myCert), transportType);
+                        break;
+                }
             }
         }
 
@@ -144,7 +149,7 @@ namespace dev_factoryiot_device
 
                     Console.Write("ProvisioningClient RegisterAsync . . . ");
                     DeviceRegistrationResult result = provClient.RegisterAsync().Result;
-
+                    deviceId = result.DeviceId;
                     Console.WriteLine($"{result.Status}");
                     Console.WriteLine($"ProvisioningClient AssignedHub: {result.AssignedHub}; DeviceID: {result.DeviceId}");
 

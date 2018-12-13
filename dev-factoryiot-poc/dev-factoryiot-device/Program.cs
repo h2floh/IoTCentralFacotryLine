@@ -9,7 +9,7 @@ namespace dev_factoryiot_device
         {
             var switchOption = args.Length < 1 ? "DPS" : args[0];
 
-            StringBuilder pass = new StringBuilder();
+            var pass = new StringBuilder();
             pass.Append(Environment.GetEnvironmentVariable("PASSWORD"));
             if (pass.Length == 0) pass.Append(System.Configuration.ConfigurationManager.AppSettings["PASSWORD"]);
 
@@ -25,7 +25,10 @@ namespace dev_factoryiot_device
                     securePassword.AppendChar(c);
                 }
             }
-                
+
+            var iothuburl = new StringBuilder();
+            iothuburl.Append(Environment.GetEnvironmentVariable("IOT_HUB_URI"));
+            if (iothuburl.Length == 0) iothuburl.Append(System.Configuration.ConfigurationManager.AppSettings["IOT_HUB_URI"]);
 
             switch (switchOption)
             {
@@ -42,7 +45,12 @@ namespace dev_factoryiot_device
                     iotConnector.Start();
                     break;
                 case "DPS":
-                    new IoTConnector(securePassword, IoTConnector.ConnectionType.DPSX509, Microsoft.Azure.Devices.Client.TransportType.Mqtt_Tcp_Only).Start();
+                    var iotConnector2 = new IoTConnector(securePassword, IoTConnector.ConnectionType.DPSX509, Microsoft.Azure.Devices.Client.TransportType.Mqtt_Tcp_Only);
+                    if (iothuburl.Length != 0)
+                    {
+                        iotConnector2.AddSecondaryConnection(securePassword, IoTConnector.ConnectionType.X509, Microsoft.Azure.Devices.Client.TransportType.Mqtt_Tcp_Only);
+                    }
+                    iotConnector2.Start();
                     break;
                 default:
                     new IoTConnector(securePassword, IoTConnector.ConnectionType.DPSX509, Microsoft.Azure.Devices.Client.TransportType.Mqtt_Tcp_Only).Start();
