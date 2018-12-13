@@ -50,6 +50,6 @@ docker rmi $(docker images --filter "dangling=true" -q --no-trunc)
 ```
 # Execute on ACI (Azure Container Instances)
 ```cli
-az container create -g IoTCentralDemo -f ProductionGroupKorea.yaml
-az container create -g IoTCentralDemo -f ProductionGroupGermany.yaml
+az container create -g IoTCentralDemo -l japaneast -f ProductionGroupKorea.yaml
+az container create -g IoTCentralDemo -l northeurope -f ProductionGroupGermany.yaml
 ```
