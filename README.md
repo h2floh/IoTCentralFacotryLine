@@ -5,8 +5,8 @@
 It is possible to specify in App.config
   1) IoT Hub (X509 CA)
         ```xml
-        <add key="iot_hub" value="iothub url"/>
-        <add key="cert_path" value="pfx"/>
+        <add key="IOT_HUB_URI" value="iothub url"/>
+        <add key="DEVICE_CERTIFICATE" value="pfx"/>
         <add key="device_id" value="deviceid"/>
         ```
   2) IoT Central SAS Connection String
