@@ -12,6 +12,7 @@ variables:
   azureContainerRegistry: '{"loginServer":"h2floh.azurecr.io", "id" : "/subscriptions/0c442b21-a8cf-4571-b835-b4d785d6628e/resourceGroups/ContainerRg/providers/Microsoft.ContainerRegistry/registries/h2floh"}'
   fakefactoryimagename: 'dev-factoryiot'
 
+# Build container image from Dockerfile
 steps:
 - task: Docker@0
   displayName: 'Build Fake Factory Line Device Image'
@@ -22,6 +23,7 @@ steps:
     imageName: '$(fakefactoryimagename):$(Build.BuildId)'
     includeLatestTag: true
 
+# Push docker image to container registry
 - task: Docker@0
   displayName: 'Push Fake Factory Line Device Image'
   inputs:
@@ -30,3 +32,25 @@ steps:
     action: 'Push an image'
     imageName: '$(fakefactoryimagename):$(Build.BuildId)'
     includeLatestTag: true
+
+# Copy Files
+# Copy files from source folder to target folder using match patterns (The match patterns will only match file paths, not folder paths)
+- task: CopyFiles@2
+  inputs:
+    #sourceFolder: # Optional
+    contents: '*.yaml' 
+    targetFolder: '$(Build.ArtifactStagingDirectory)' 
+    #cleanTargetFolder: false # Optional
+    #overWrite: false # Optional
+    #flattenFolders: false # Optional
+
+# Publish Build Artifacts
+# Publish build artifacts to Azure Pipelines/TFS or a file share
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathtoPublish: '$(Build.ArtifactStagingDirectory)' 
+    artifactName: 'yaml' 
+    #publishLocation: 'Container' # Options: container, filePath
+    #targetPath: # Required when publishLocation == FilePath
+    #parallel: false # Optional
+    #parallelCount: # Optional
