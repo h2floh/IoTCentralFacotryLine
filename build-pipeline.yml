@@ -18,7 +18,7 @@ steps:
   inputs:
     azureSubscription: $(azureSubscription)
     azureContainerRegistry: $(azureContainerRegistry)
-    dockerFile: 'dev-factoryiot-device/Dockerfile'
+    dockerFile: 'dev-factoryiot-device/dev-factoryiot-device/Dockerfile'
     imageName: '$(fakefactoryimagename):$(Build.BuildId)'
     includeLatestTag: true
 
