@@ -1,0 +1,32 @@
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- h2floh/demo
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  azureSubscription: 'VSE (FTE) Florian (0c442b21-a8cf-4571-b835-b4d785d6628e)'
+  azureContainerRegistry: '{"loginServer":"h2floh.azurecr.io", "id" : "/subscriptions/0c442b21-a8cf-4571-b835-b4d785d6628e/resourceGroups/ContainerRg/providers/Microsoft.ContainerRegistry/registries/h2floh"}'
+  fakefactoryimagename: 'dev-factoryiot'
+
+steps:
+- task: Docker@0
+  displayName: 'Build Fake Factory Line Device Image'
+  inputs:
+    azureSubscription: $(azureSubscription)
+    azureContainerRegistry: $(azureContainerRegistry)
+    dockerFile: 'dev-factoryiot-device/Dockerfile'
+    imageName: '$(fakefactoryimagename):$(Build.BuildId)'
+    includeLatestTag: true
+
+- task: Docker@0
+  displayName: 'Push Fake Factory Line Device Image'
+  inputs:
+    azureSubscription: $(azureSubscription)
+    azureContainerRegistry: $(azureContainerRegistry)
+    action: 'Push an image'
+    imageName: '$(fakefactoryimagename):$(Build.BuildId)'
+    includeLatestTag: true
