@@ -1,5 +1,5 @@
 apiVersion: 2018-06-01
-location: northeurope
+location: '$(iotfactorygermany_location)'
 name: GermanyFactory
 properties:
   containers:
@@ -12,7 +12,7 @@ properties:
           value: '$(IoTCentralDPS_ScopeID)'
         - name: 'PASSWORD'
           secureValue: '$(password_germany_lineA)'
-      image: $(iotfactorycontainerImageToDeploy)
+      image: '$(iotfactorycontainerImageToDeploy)'
       resources:
         requests:
           cpu: 0.5
@@ -26,11 +26,15 @@ properties:
           value: '$(IoTCentralDPS_ScopeID)'
         - name: 'PASSWORD'
           secureValue: '$(password_germany_lineB)'
-      image: $(iotfactorycontainerImageToDeploy)
+      image: '$(iotfactorycontainerImageToDeploy)'
       resources:
         requests:
           cpu: 0.5
           memoryInGb: 0.5
   osType: Linux
+  imageRegistryCredentials:
+  - server: '$(imageRegistryServer)'
+    username: '$(imageRegistryUsername)'
+    password: '$(imageRegistryPassword)'
 tags: null
 type: Microsoft.ContainerInstance/containerGroups
